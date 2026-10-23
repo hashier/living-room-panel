@@ -152,6 +152,9 @@ touchscreen:
           condition:
             lambda: return id(dimmed) && !id(lvgl_comp).is_paused();
           then:
+            # The tap that ends dimming only brightens the screen: LVGL ignores the rest of
+            # this touch, so the button under the finger is not pressed
+            - lambda: lv_indev_wait_release(lv_indev_get_next(nullptr));
             - script.execute: restore_brightness
     # Wake from the screen saver; while LVGL is paused the tap reaches no widget
     on_release:
