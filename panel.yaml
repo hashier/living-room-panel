@@ -328,7 +328,7 @@ script:
       - lvgl.widget.update:
           id: btn_all
           state:
-            checked: !lambda return id(st_win_left).state || id(st_center).state || id(st_win_right).state || id(st_sofa).state;
+            checked: !lambda return id(st_win_left).state && id(st_center).state && id(st_win_right).state && id(st_sofa).state;
   - id: restore_brightness
     then:
       - if:
@@ -1154,7 +1154,8 @@ lvgl:
                         data:
                           entity_id: light.sofalight
               # Switches the four lights one by one, not the ZHA group: group commands left
-              # Home Assistant with stale member states. Off if any is on, otherwise on.
+              # Home Assistant with stale member states. Lit when all are on; then a tap turns
+              # them off, otherwise it turns them all on.
               - button:
                   id: btn_all
                   styles: card
@@ -1172,7 +1173,7 @@ lvgl:
                   on_click:
                     - if:
                         condition:
-                          lambda: return id(st_win_left).state || id(st_center).state || id(st_win_right).state || id(st_sofa).state;
+                          lambda: return id(st_win_left).state && id(st_center).state && id(st_win_right).state && id(st_sofa).state;
                         then:
                           - homeassistant.action:
                               action: homeassistant.turn_off
