@@ -217,13 +217,20 @@ number:
     min_value: 5
     max_value: 100
     step: 5
-    lambda: return id(display_backlight).remote_values.get_brightness() * 100;
+    lambda: return id(user_brightness) * 100;
     update_interval: never
+    # Always store the new brightness, but only apply it while the screen is on and not dimmed,
+    # so a scheduled change (e.g. a Home Assistant automation at night) doesn't wake the screen
     set_action:
-      - globals.set: { id: dimmed, value: "false" }
-      - light.turn_on:
-          id: display_backlight
-          brightness: !lambda return x / 100.0;
+      - lambda: id(user_brightness) = x / 100.0;
+      - if:
+          condition:
+            lambda: return id(display_backlight).remote_values.is_on() && !id(dimmed);
+          then:
+            - light.turn_on:
+                id: display_backlight
+                brightness: !lambda return x / 100.0;
+      - component.update: brightness_number
 
 interval:
   - interval: 1s
