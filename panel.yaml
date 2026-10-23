@@ -1,6 +1,10 @@
 esphome:
   name: "guition-esp32-s3-4848s040"
   friendly_name: "4848s040"
+  # lv_snapshot (used by the screenshot component) is off in ESPHome's generated lv_conf.h;
+  # ESPHome only leaves an LVGL option alone when it comes from these build flags
+  build_flags:
+    - -DLV_USE_SNAPSHOT=1
   on_boot:
     priority: -100
     then:
@@ -1074,3 +1078,12 @@ lvgl:
                           - switch.turn_on: screensaver_enabled
                         else:
                           - switch.turn_off: screensaver_enabled
+
+# GET http://<panel>/screenshot returns the current screen as a BMP (own component in components/)
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [screenshot]
+
+screenshot:
