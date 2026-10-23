@@ -25,6 +25,10 @@ psram:
   speed: 80MHz
 
 logger:
+  # The USB socket goes through a CH340 to UART0; the S3's own USB (the default here) isn't connected.
+  # Its pins are touch SDA (GPIO19) and a display data line (GPIO20), so ESPHome warns about both on
+  # every build. That check has no option to turn it off, and with logs on UART0 nothing uses that USB.
+  hardware_uart: UART0
 
 api:
   encryption:
