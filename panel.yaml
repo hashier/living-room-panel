@@ -254,6 +254,28 @@ interval:
           lv_label_set_text(id(lbl_conn), ha_ok ? "" : wifi_ok ? "No Home Assistant" : "No WiFi");
           lv_obj_set_style_text_color(id(lbl_conn), lv_color_hex(c), LV_PART_MAIN);
 
+          // Without Home Assistant for 2 min, replace the readings with "--" so nobody
+          // trusts an old value; Home Assistant resends every state when it reconnects
+          static uint32_t lost_since = 0;
+          static bool stale = false;
+          if (ha_ok) {
+            lost_since = 0;
+            stale = false;
+            return;
+          }
+          if (lost_since == 0)
+            lost_since = millis();
+          if (stale || millis() - lost_since < 120000)
+            return;
+          stale = true;
+          for (lv_obj_t *l : {id(lbl_room), id(lbl_target), id(val_co2), id(val_pm25), id(val_hum),
+                              id(st_co2), id(st_pm25), id(st_hum), id(lbl_status)})
+            lv_label_set_text(l, "--");
+          lv_label_set_text(id(lbl_offset), "");
+          for (lv_obj_t *l : {id(st_co2), id(st_pm25), id(st_hum), id(ic_co2), id(ic_pm25), id(ic_hum)})
+            lv_obj_set_style_text_color(l, lv_color_hex(0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(chip_status), lv_color_hex(0x1B2129), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(chip_status), lv_color_hex(0x8A94A6), LV_PART_MAIN);
 
 globals:
   # Numbers restore their values during setup, before LVGL has created the widgets
