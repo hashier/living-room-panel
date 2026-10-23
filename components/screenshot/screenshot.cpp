@@ -14,6 +14,8 @@ static const char *const TAG = "screenshot";
 static const uint32_t BMP_HEADER_SIZE = 54;
 
 void Screenshot::setup() {
+  // A capture renders the screen and the top layer once each (measured 279 ms), only on request
+  this->warn_if_blocking_over_ = 35;  // centiseconds
   this->done_ = xSemaphoreCreateBinary();
   this->base_->init();
   this->base_->add_handler(this);
