@@ -231,6 +231,19 @@ interval:
           lv_obj_set_style_bg_color(id(dot_conn), lv_color_hex(c), LV_PART_MAIN);
 
 globals:
+  # Air ratings per sensor (-1 unknown, 0 good, 1 OK, 2 bad) for the one-line summary
+  - id: air_co2_level
+    type: int
+    initial_value: "-1"
+  - id: air_pm_level
+    type: int
+    initial_value: "-1"
+  - id: air_hum_level
+    type: int
+    initial_value: "-1"
+  - id: air_too_dry
+    type: bool
+    initial_value: "false"
   # Numbers restore their values during setup, before LVGL has created the widgets
   # (template number priority 800, LVGL 400), so widget updates wait for on_boot
   - id: ui_ready
@@ -248,6 +261,47 @@ globals:
     initial_value: "1.0"
 
 script:
+  # Fill one ring gauge: value text, ring position and colour, rating word
+  - id: show_gauge
+    parameters:
+      arc: lv_obj_t*
+      value_label: lv_obj_t*
+      word_label: lv_obj_t*
+      value: float
+      lo: int
+      hi: int
+      level: int
+      word: std::string
+    then:
+      - lambda: |-
+          static const uint32_t colours[] = {0x34C759, 0xFFC107, 0xFF453A};
+          uint32_t c = level < 0 ? 0x8A94A6 : colours[level];
+          if (std::isnan(value)) {
+            lv_label_set_text(value_label, "--");
+            lv_label_set_text(word_label, "--");
+          } else {
+            lv_label_set_text_fmt(value_label, "%.0f", value);
+            lv_label_set_text(word_label, word.c_str());
+          }
+          int v = std::isnan(value) ? lo : std::max(lo, std::min(hi, (int) value));
+          lv_arc_set_range(arc, lo, hi);
+          lv_arc_set_value(arc, v);
+          lv_obj_set_style_arc_color(arc, lv_color_hex(c), LV_PART_INDICATOR);
+          lv_obj_set_style_text_color(word_label, lv_color_hex(c), LV_PART_MAIN);
+  # One plain sentence for the whole air page, from the worst rating
+  - id: update_air_summary
+    then:
+      - lambda: |-
+          const char *s = "Waiting for data";
+          uint32_t c = 0x8A94A6;
+          int worst = std::max(id(air_co2_level), std::max(id(air_pm_level), id(air_hum_level)));
+          if (id(air_co2_level) == 2) { s = "Open a window"; c = 0xFF453A; }
+          else if (id(air_pm_level) == 2) { s = "Dusty air, keep windows closed"; c = 0xFF453A; }
+          else if (id(air_hum_level) == 2) { s = id(air_too_dry) ? "The air is very dry" : "The air is very humid"; c = 0xFF453A; }
+          else if (worst == 1) { s = "Air is OK"; c = 0xFFC107; }
+          else if (worst == 0) { s = "Air is great"; c = 0x34C759; }
+          lv_label_set_text(id(lbl_air_summary), s);
+          lv_obj_set_style_text_color(id(lbl_air_summary), lv_color_hex(c), LV_PART_MAIN);
   # Show the screen settings on the Screen page
   - id: sync_screen_settings
     then:
@@ -336,9 +390,9 @@ sensor:
       - lvgl.label.update:
           id: lbl_room
           text:
-            format: "%.1f°"
+            format: "Room %.1f°"
             args: [x]
-            if_nan: "--"
+            if_nan: "Room --"
   # The setpoint the thermostat really uses; the automation copies sensor.desired_temperature here every 5 min
   - platform: homeassistant
     id: target_temp
@@ -351,10 +405,23 @@ sensor:
             format: "%.1f°"
             args: [x]
             if_nan: "--"
+  # The schedule's temperature; the dial covers it ±2 °C, the range of the adjustment helper
+  - platform: homeassistant
+    id: schedule_temp
+    entity_id: sensor.desired_temperature
+    on_value:
+      - lambda: |-
+          if (std::isnan(x)) return;
+          lv_label_set_text_fmt(id(lbl_dial_min), "%.1f°", x - 2);
+          lv_label_set_text_fmt(id(lbl_dial_max), "%.1f°", x + 2);
   - platform: homeassistant
     id: target_offset
     entity_id: input_number.adjust_desired_temperature
     on_value:
+      # Dial steps 0-8 are offsets -2.0 to +2.0 in 0.5 steps
+      - lvgl.arc.update:
+          id: dial
+          value: !lambda "return std::isnan(x) ? 4 : (int) lroundf(x * 2) + 4;"
       - lvgl.label.update:
           id: lbl_offset
           text: !lambda |-
@@ -362,70 +429,39 @@ sensor:
             char buf[32];
             snprintf(buf, sizeof(buf), "%+.1f° vs. schedule", x);
             return std::string(buf);
+  # Air gauges: rings fill over a fixed range, colour and word from the thresholds
+  # (my choice: CO2 800/1200 ppm, PM2.5 12/35 µg/m³, humidity 40-60 / 30-70 %)
   - platform: homeassistant
     id: lr_co2
     entity_id: sensor.air_quality_monitor_co2
     on_value:
-      - lvgl.label.update:
-          id: val_co2
-          text:
-            format: "%.0f"
-            args: [x]
-            if_nan: "--"
-      # Thresholds are my choice: under 800 ppm fresh, under 1200 acceptable
       - lambda: |-
-          uint32_t c = 0x8A94A6; const char *s = "--";
-          if (!std::isnan(x)) {
-            if (x < 800) { c = 0x34C759; s = "Fresh"; }
-            else if (x < 1200) { c = 0xFFC107; s = "OK"; }
-            else { c = 0xFF453A; s = "Open a window"; }
-          }
-          lv_label_set_text(id(st_co2), s);
-          lv_obj_set_style_text_color(id(st_co2), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_co2), lv_color_hex(c), LV_PART_MAIN);
+          int level = std::isnan(x) ? -1 : x < 800 ? 0 : x < 1200 ? 1 : 2;
+          id(air_co2_level) = level;
+          id(show_gauge).execute(id(arc_co2), id(val_co2), id(st_co2), x, 400, 2000, level,
+                                 level == 0 ? "Fresh" : level == 1 ? "OK" : "Stale");
+          id(update_air_summary).execute();
   - platform: homeassistant
     id: lr_pm25
     entity_id: sensor.air_quality_monitor_pm_2_5
     on_value:
-      - lvgl.label.update:
-          id: val_pm25
-          text:
-            format: "%.0f"
-            args: [x]
-            if_nan: "--"
-      # Thresholds are my choice: under 12 µg/m³ clean, under 35 acceptable
       - lambda: |-
-          uint32_t c = 0x8A94A6; const char *s = "--";
-          if (!std::isnan(x)) {
-            if (x < 12) { c = 0x34C759; s = "Clean"; }
-            else if (x < 35) { c = 0xFFC107; s = "OK"; }
-            else { c = 0xFF453A; s = "Poor"; }
-          }
-          lv_label_set_text(id(st_pm25), s);
-          lv_obj_set_style_text_color(id(st_pm25), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_pm25), lv_color_hex(c), LV_PART_MAIN);
+          int level = std::isnan(x) ? -1 : x < 12 ? 0 : x < 35 ? 1 : 2;
+          id(air_pm_level) = level;
+          id(show_gauge).execute(id(arc_pm25), id(val_pm25), id(st_pm25), x, 0, 50, level,
+                                 level == 0 ? "Clean" : level == 1 ? "OK" : "Poor");
+          id(update_air_summary).execute();
   - platform: homeassistant
     id: lr_humidity
     entity_id: sensor.atc_5977_humidity
     on_value:
-      - lvgl.label.update:
-          id: val_hum
-          text:
-            format: "%.0f"
-            args: [x]
-            if_nan: "--"
-      # Thresholds are my choice: 40-60 % comfortable, 30-70 % acceptable
       - lambda: |-
-          uint32_t c = 0x8A94A6; const char *s = "--";
-          if (!std::isnan(x)) {
-            if (x >= 40 && x <= 60) { c = 0x34C759; s = "Comfortable"; }
-            else if (x >= 30 && x <= 70) { c = 0xFFC107; s = "OK"; }
-            else if (x < 30) { c = 0xFF453A; s = "Too dry"; }
-            else { c = 0xFF453A; s = "Too humid"; }
-          }
-          lv_label_set_text(id(st_hum), s);
-          lv_obj_set_style_text_color(id(st_hum), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_hum), lv_color_hex(c), LV_PART_MAIN);
+          int level = std::isnan(x) ? -1 : (x >= 40 && x <= 60) ? 0 : (x >= 30 && x <= 70) ? 1 : 2;
+          id(air_hum_level) = level;
+          id(air_too_dry) = x < 40;
+          id(show_gauge).execute(id(arc_hum), id(val_hum), id(st_hum), x, 0, 100, level,
+                                 level == 0 ? "Comfy" : level == 1 ? "OK" : (x < 30 ? "Dry" : "Humid"));
+          id(update_air_summary).execute();
   - platform: wifi_signal
     name: WiFi signal
     update_interval: 60s
@@ -441,9 +477,10 @@ text_sensor:
       - lambda: |-
           bool h = x == "heating";
           lv_label_set_text(id(lbl_status), h ? "Heating" : "Not heating");
-          lv_label_set_text(id(ico_status), h ? "\U000F0238" : "\U000F0AD8");
-          lv_obj_set_style_bg_color(id(chip_status), lv_color_hex(h ? 0xFF7A1A : 0x1B2129), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(chip_status), lv_color_hex(h ? 0xFFFFFF : 0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_status), lv_color_hex(h ? 0xFF7A1A : 0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(ico_status), lv_color_hex(h ? 0xFF7A1A : 0x3A4350), LV_PART_MAIN);
+          // The ring glows orange while heating, warm yellow otherwise
+          lv_obj_set_style_arc_color(id(dial), lv_color_hex(h ? 0xFF7A1A : 0xF5B942), LV_PART_INDICATOR);
 
 button:
   - platform: restart
@@ -648,92 +685,51 @@ lvgl:
         - lambda: lv_indev_wait_release(lv_indev_active());
         - lvgl.page.previous: { animation: MOVE_RIGHT, time: 300ms }
       widgets:
-        # Status chip: orange with a flame while heating, grey otherwise
-        - obj:
-            id: chip_status
-            styles: card
-            align: TOP_MID
-            y: 24
-            width: SIZE_CONTENT
-            height: 48
-            radius: 24
-            pad_left: 18
-            pad_right: 22
-            scrollable: false
-            text_color: 0x8A94A6
-            layout:
-              type: flex
-              flex_flow: row
-              flex_align_cross: center
-              flex_align_track: center
-              pad_column: 8
-            widgets:
-              - label: { id: ico_status, text: "\U000F0AD8", text_font: f_icons }
-              - label: { id: lbl_status, text: "--" }
-        - label:
-            text: "Living room"
-            styles: muted
+        # Dial: drag the knob to set the target, schedule ±2 °C in 0.5 steps
+        - arc:
+            id: dial
             align: CENTER
-            y: -118
-        - label:
-            id: lbl_room
-            text: "--"
-            text_font: f_hero
-            align: CENTER
-            y: -48
-        # Set-point card with big round buttons
-        - obj:
-            styles: card
-            align: BOTTOM_MID
-            y: -36
-            width: 440
-            height: 150
-            scrollable: false
-            widgets:
-              - button:
-                  styles: round_btn
-                  align: LEFT_MID
-                  x: 20
-                  width: 100
-                  height: 100
-                  widgets:
-                    - label: { align: CENTER, text: "\U000F0374", text_font: f_icons }
-                  on_click:
-                    - homeassistant.action:
-                        action: input_number.decrement
-                        data:
-                          entity_id: input_number.adjust_desired_temperature
-              - label:
-                  text: "Set to"
-                  styles: muted
-                  align: CENTER
-                  y: -44
-              - label:
-                  id: lbl_target
-                  text: "--"
-                  text_font: f_value
-                  align: CENTER
-                  y: -2
-              - label:
-                  id: lbl_offset
-                  text: ""
-                  styles: muted
-                  text_font: montserrat_16
-                  align: CENTER
-                  y: 44
-              - button:
-                  styles: round_btn
-                  align: RIGHT_MID
-                  x: -20
-                  width: 100
-                  height: 100
-                  widgets:
-                    - label: { align: CENTER, text: "\U000F0415", text_font: f_icons }
-                  on_click:
-                    - homeassistant.action:
-                        action: input_number.increment
-                        data:
-                          entity_id: input_number.adjust_desired_temperature
+            y: 12
+            width: 400
+            height: 400
+            min_value: 0
+            max_value: 8
+            value: 4
+            start_angle: 135
+            end_angle: 45
+            adjustable: true
+            arc_width: 28
+            arc_color: 0x1B2129
+            arc_rounded: true
+            bg_opa: TRANSP
+            # Only the ring reacts to touch, so swipes in the middle still change pages
+            adv_hittest: true
+            gesture_bubble: false
+            indicator:
+              arc_width: 28
+              arc_color: 0xF5B942
+              arc_rounded: true
+            knob:
+              bg_color: 0xF2F4F7
+              pad_all: 6
+            # Preview the new target while dragging, send it when the finger lifts
+            on_change:
+              - lambda: |-
+                  float target = id(schedule_temp).state + (x - 4) * 0.5f;
+                  if (!std::isnan(target)) lv_label_set_text_fmt(id(lbl_target), "%.1f°", target);
+            on_release:
+              - homeassistant.action:
+                  action: input_number.set_value
+                  data:
+                    entity_id: input_number.adjust_desired_temperature
+                    value: !lambda "return str_sprintf(\"%.1f\", (x - 4) * 0.5f);"
+        - label: { id: ico_status, text: "\U000F0238", text_font: f_icons, text_color: 0x3A4350, align: CENTER, y: -96 }
+        - label: { id: lbl_target, text: "--", text_font: f_hero, align: CENTER, y: -6 }
+        - label: { id: lbl_room, text: "Room --", align: CENTER, y: 74, text_color: 0xF2F4F7 }
+        - label: { id: lbl_offset, text: "", styles: muted, text_font: montserrat_16, align: CENTER, y: 104 }
+        - label: { id: lbl_status, text: "--", align: CENTER, y: 168, styles: muted }
+        - label: { id: lbl_dial_min, text: "", styles: muted, text_font: montserrat_16, align: CENTER, x: -118, y: 196 }
+        - label: { id: lbl_dial_max, text: "", styles: muted, text_font: montserrat_16, align: CENTER, x: 118, y: 196 }
 
     # ---------------------------------------------------------------- Air
     - id: living_room
@@ -745,8 +741,6 @@ lvgl:
             lv_obj_t *dots[] = {id(dot_heating), id(dot_air), id(dot_lights), id(dot_screen)};
             for (int i = 0; i < 4; i++) lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == 1 ? 0xF2F4F7 : 0x3A4350), LV_PART_MAIN);
       on_swipe_left:
-        # A swipe ends this touch: LVGL sends PRESS_LOST to the button under the finger
-        # and no click on release (lv_indev.c, LVGL 9.5)
         - lambda: lv_indev_wait_release(lv_indev_active());
         - lvgl.page.next: { animation: MOVE_LEFT, time: 300ms }
       on_swipe_right:
@@ -754,45 +748,100 @@ lvgl:
         - lvgl.page.previous: { animation: MOVE_RIGHT, time: 300ms }
       widgets:
         - label: { text: "Air", styles: page_title }
+        # CO₂ gauge
+        - arc:
+            id: arc_co2
+            align: TOP_MID
+            x: -150
+            y: 96
+            width: 136
+            height: 136
+            min_value: 0
+            max_value: 100
+            value: 0
+            start_angle: 135
+            end_angle: 45
+            arc_width: 12
+            arc_color: 0x1B2129
+            arc_rounded: true
+            bg_opa: TRANSP
+            clickable: false
+            indicator:
+              arc_width: 12
+              arc_color: 0x8A94A6
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+        - label: { id: val_co2, text: "--", text_font: f_title, align: TOP_MID, x: -150, y: 140 }
+        - label: { text: "ppm", styles: muted, text_font: montserrat_16, align: TOP_MID, x: -150, y: 180 }
+        - label: { text: "CO₂", align: TOP_MID, x: -150, y: 244 }
+        - label: { id: st_co2, text: "--", styles: muted, align: TOP_MID, x: -150, y: 274 }
+        # Fine dust gauge
+        - arc:
+            id: arc_pm25
+            align: TOP_MID
+            x: 0
+            y: 96
+            width: 136
+            height: 136
+            min_value: 0
+            max_value: 100
+            value: 0
+            start_angle: 135
+            end_angle: 45
+            arc_width: 12
+            arc_color: 0x1B2129
+            arc_rounded: true
+            bg_opa: TRANSP
+            clickable: false
+            indicator:
+              arc_width: 12
+              arc_color: 0x8A94A6
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+        - label: { id: val_pm25, text: "--", text_font: f_title, align: TOP_MID, x: 0, y: 140 }
+        - label: { text: "µg/m³", styles: muted, text_font: montserrat_16, align: TOP_MID, x: 0, y: 180 }
+        - label: { text: "Fine dust", align: TOP_MID, x: 0, y: 244 }
+        - label: { id: st_pm25, text: "--", styles: muted, align: TOP_MID, x: 0, y: 274 }
+        # Humidity gauge
+        - arc:
+            id: arc_hum
+            align: TOP_MID
+            x: 150
+            y: 96
+            width: 136
+            height: 136
+            min_value: 0
+            max_value: 100
+            value: 0
+            start_angle: 135
+            end_angle: 45
+            arc_width: 12
+            arc_color: 0x1B2129
+            arc_rounded: true
+            bg_opa: TRANSP
+            clickable: false
+            indicator:
+              arc_width: 12
+              arc_color: 0x8A94A6
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+        - label: { id: val_hum, text: "--", text_font: f_title, align: TOP_MID, x: 150, y: 140 }
+        - label: { text: "%", styles: muted, text_font: montserrat_16, align: TOP_MID, x: 150, y: 180 }
+        - label: { text: "Humidity", align: TOP_MID, x: 150, y: 244 }
+        - label: { id: st_hum, text: "--", styles: muted, align: TOP_MID, x: 150, y: 274 }
+        # Summary card
         - obj:
             styles: card
             align: TOP_MID
-            y: 84
+            y: 336
             width: 440
-            height: 110
+            height: 96
             scrollable: false
             widgets:
-              - label: { id: ic_co2, text: "\U000F07E4", text_font: f_icons, align: LEFT_MID, x: 22, text_color: 0x8A94A6 }
-              - label: { text: "CO₂", styles: muted, align: LEFT_MID, x: 82, y: -16 }
-              - label: { id: st_co2, text: "--", align: LEFT_MID, x: 82, y: 16 }
-              - label: { id: val_co2, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "ppm", styles: muted, align: RIGHT_MID, x: -22, y: 10 }
-        - obj:
-            styles: card
-            align: TOP_MID
-            y: 206
-            width: 440
-            height: 110
-            scrollable: false
-            widgets:
-              - label: { id: ic_pm25, text: "\U000F00B5", text_font: f_icons, align: LEFT_MID, x: 22, text_color: 0x8A94A6 }
-              - label: { text: "Fine dust", styles: muted, align: LEFT_MID, x: 82, y: -16 }
-              - label: { id: st_pm25, text: "--", align: LEFT_MID, x: 82, y: 16 }
-              - label: { id: val_pm25, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "µg/m³", styles: muted, align: RIGHT_MID, x: -14, y: 10 }
-        - obj:
-            styles: card
-            align: TOP_MID
-            y: 328
-            width: 440
-            height: 110
-            scrollable: false
-            widgets:
-              - label: { id: ic_hum, text: "\U000F058E", text_font: f_icons, align: LEFT_MID, x: 22, text_color: 0x8A94A6 }
-              - label: { text: "Humidity", styles: muted, align: LEFT_MID, x: 82, y: -16 }
-              - label: { id: st_hum, text: "--", align: LEFT_MID, x: 82, y: 16 }
-              - label: { id: val_hum, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "%", styles: muted, align: RIGHT_MID, x: -40, y: 10 }
+              - label: { id: lbl_air_summary, text: "Waiting for data", text_font: f_title, align: CENTER }
 
     # ---------------------------------------------------------------- Lights
     - id: lights
