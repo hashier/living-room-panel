@@ -11,13 +11,16 @@ esphome:
   on_boot:
     priority: -100
     then:
+      - globals.set: { id: ui_ready, value: "true" }
+      - script.execute: sync_screen_settings
+      # Colours first and drawn at once: LVGL had drawn the dark set during setup, which
+      # showed for a moment when the backlight came on before the switch
+      - script.execute: apply_page_set
+      - lambda: lv_refr_now(nullptr);
       - light.turn_on:
           id: display_backlight
           brightness: !lambda return id(user_brightness);
           transition_length: 0s
-      - globals.set: { id: ui_ready, value: "true" }
-      - script.execute: sync_screen_settings
-      - script.execute: apply_page_set
 
 esp32:
   variant: esp32s3
