@@ -7,9 +7,11 @@ Home Assistant wall panel: heating, air quality, lights and screen settings.
 <img src="screenshots/air.png" width="240" alt="Air"> <img src="screenshots/lights.png" width="240" alt="Lights">
 <img src="screenshots/screen.png" width="240" alt="Screen">
 
-Swipe left and right to change pages. The screenshots come from the panel itself (`GET /screenshot`, see
-`components/screenshot`); the fine dust value, the sofa light being off and the bedroom
-heating are made up for the pictures.
+Swipe left and right to change pages. The pictures come from `python3 preview.py`, which builds the
+config for this computer instead of the panel and renders every page with demo values into
+`.esphome/preview/` (about 4 s after a change, 30 s the first time). It shows the look only, no touch and
+no Home Assistant. The panel itself also serves its current screen at `GET /screenshot` (see
+`components/screenshot`).
 
 A small dim green dot in the corner means all is well. Without Home Assistant it turns yellow, without WiFi
 red, and after 2 minutes the readings change to "--" so nobody trusts an old value:
