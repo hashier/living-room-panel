@@ -1215,9 +1215,9 @@ lvgl:
               - slider:
                   id: sld_brightness
                   align: TOP_RIGHT
-                  x: -30
+                  x: -20
                   y: 30
-                  width: 200
+                  width: 206
                   height: 14
                   min_value: 5
                   max_value: 100
@@ -1241,9 +1241,9 @@ lvgl:
               - slider:
                   id: sld_dim
                   align: TOP_RIGHT
-                  x: -30
+                  x: -20
                   y: 102
-                  width: 200
+                  width: 206
                   height: 14
                   min_value: 5
                   max_value: 100
@@ -1306,7 +1306,7 @@ lvgl:
               - switch:
                   id: sw_saver
                   align: TOP_RIGHT
-                  x: -24
+                  x: -20
                   y: 306
                   width: 72
                   height: 38
