@@ -19,6 +19,10 @@ esp32:
   variant: esp32s3
   framework:
     type: esp-idf
+    advanced:
+      # The boot log named the Boya driver as the one in use; dropping the other vendors'
+      # drivers saves IRAM and ends the boot warning that asked for this
+      flash_chip: boya
 
 psram:
   mode: octal
