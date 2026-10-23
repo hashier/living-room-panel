@@ -385,6 +385,14 @@ font:
       - "\U000F00DF" # brightness-6
       - "\U000F0374" # minus
       - "\U000F0415" # plus
+  # Small room icons for the page titles
+  - file: "https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/master/fonts/materialdesignicons-webfont.ttf"
+    id: f_icons_small
+    size: 26
+    bpp: 4
+    glyphs:
+      - "\U000F04B9" # sofa
+      - "\U000F02E3" # bed
 
 sensor:
   # ATC 5977 is the thermostat's own target_sensor
@@ -780,20 +788,37 @@ lvgl:
             widgets:
               - label: { id: ico_status, text: "\U000F0AD8", text_font: f_icons }
               - label: { id: lbl_status, text: "--" }
-        - label:
-            text: "Living room"
-            styles: muted
+        # Room title: small icon and name in the room's accent colour; the colour tells the pages apart
+        - obj:
             align: CENTER
             y: -118
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            text_color: 0xF5B942
+            layout:
+              type: flex
+              flex_flow: row
+              flex_align_cross: center
+              pad_column: 6
+            widgets:
+              - label: { text: "\U000F04B9", text_font: f_icons_small }
+              - label: { text: "Living room" }
         - label:
             id: lbl_room
             text: "--"
             text_font: f_hero
             align: CENTER
             y: -48
-        # Set-point card with big round buttons
+        # Set-point card with big round buttons, edged in the room's accent colour
         - obj:
             styles: card
+            border_width: 2
+            border_color: 0xF5B942
+            border_opa: 60%
             align: BOTTOM_MID
             y: -36
             width: 440
@@ -880,20 +905,37 @@ lvgl:
             widgets:
               - label: { id: ico_bed_status, text: "\U000F0AD8", text_font: f_icons }
               - label: { id: lbl_bed_status, text: "--" }
-        - label:
-            text: "Bedroom"
-            styles: muted
+        # Room title: small icon and name in the room's accent colour; the colour tells the pages apart
+        - obj:
             align: CENTER
             y: -118
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            text_color: 0x8E9BFF
+            layout:
+              type: flex
+              flex_flow: row
+              flex_align_cross: center
+              pad_column: 6
+            widgets:
+              - label: { text: "\U000F02E3", text_font: f_icons_small }
+              - label: { text: "Bedroom" }
         - label:
             id: lbl_bed_room
             text: "--"
             text_font: f_hero
             align: CENTER
             y: -48
-        # Set-point card with big round buttons
+        # Set-point card with big round buttons, edged in the room's accent colour
         - obj:
             styles: card
+            border_width: 2
+            border_color: 0x8E9BFF
+            border_opa: 60%
             align: BOTTOM_MID
             y: -36
             width: 440
