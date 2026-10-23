@@ -8,6 +8,8 @@ esphome:
           id: display_backlight
           brightness: !lambda return id(user_brightness);
           transition_length: 0s
+      - globals.set: { id: ui_ready, value: "true" }
+      - script.execute: sync_screen_settings
 
 esp32:
   variant: esp32s3
@@ -165,6 +167,12 @@ number:
     min_value: 1
     max_value: 60
     step: 1
+    on_value:
+      - if:
+          condition:
+            lambda: return id(ui_ready);
+          then:
+            - script.execute: sync_screen_settings
   - platform: template
     name: Screen off after dimming
     id: off_after_dim
@@ -175,6 +183,12 @@ number:
     min_value: 1
     max_value: 120
     step: 1
+    on_value:
+      - if:
+          condition:
+            lambda: return id(ui_ready);
+          then:
+            - script.execute: sync_screen_settings
   - platform: template
     name: Dim brightness
     id: dim_level
@@ -185,6 +199,12 @@ number:
     min_value: 5
     max_value: 100
     step: 5
+    on_value:
+      - if:
+          condition:
+            lambda: return id(ui_ready);
+          then:
+            - script.execute: sync_screen_settings
   # Shows as a slider on the device page; the Backlight light only offers brightness in its popup
   - platform: template
     name: Screen brightness
@@ -211,6 +231,11 @@ interval:
           lv_obj_set_style_bg_color(id(dot_conn), lv_color_hex(c), LV_PART_MAIN);
 
 globals:
+  # Numbers restore their values during setup, before LVGL has created the widgets
+  # (template number priority 800, LVGL 400), so widget updates wait for on_boot
+  - id: ui_ready
+    type: bool
+    initial_value: "false"
   # Set while the idle dim stage is active, so the next touch restores the user's brightness
   - id: dimmed
     type: bool
@@ -223,6 +248,17 @@ globals:
     initial_value: "1.0"
 
 script:
+  # Show the screen settings on the Screen page
+  - id: sync_screen_settings
+    then:
+      - lambda: |-
+          lv_label_set_text_fmt(id(lbl_dim_after), "%.0f min", id(dim_after).state);
+          lv_label_set_text_fmt(id(lbl_off_after), "%.0f min", id(off_after_dim).state);
+          lv_slider_set_value(id(sld_dim), (int32_t) id(dim_level).state, LV_ANIM_OFF);
+          if (id(screensaver_enabled).state)
+            lv_obj_add_state(id(sw_saver), LV_STATE_CHECKED);
+          else
+            lv_obj_remove_state(id(sw_saver), LV_STATE_CHECKED);
   # "All lights" shows as on while any of the four is on
   - id: update_all_button
     then:
@@ -419,6 +455,18 @@ switch:
     id: screensaver_enabled
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - if:
+          condition:
+            lambda: return id(ui_ready);
+          then:
+            - script.execute: sync_screen_settings
+    on_turn_off:
+      - if:
+          condition:
+            lambda: return id(ui_ready);
+          then:
+            - script.execute: sync_screen_settings
 
 # Shows which page is on screen and switches it from Home Assistant
 select:
@@ -510,6 +558,16 @@ lvgl:
       pad_all: 0
       shadow_width: 0
     - id: round_btn
+      bg_color: 0x2A323D
+      radius: 65535
+      border_width: 0
+      shadow_width: 0
+      text_color: 0xF2F4F7
+    - id: settings_slider
+      bg_color: 0x2A323D
+    - id: small_round_btn
+      width: 56
+      height: 56
       bg_color: 0x2A323D
       radius: 65535
       border_width: 0
@@ -892,26 +950,29 @@ lvgl:
         - lvgl.page.previous: { animation: MOVE_RIGHT, time: 300ms }
       widgets:
         - label: { text: "Screen", styles: page_title }
+        # Settings card, one row every 72 px
         - obj:
             styles: card
-            align: CENTER
+            align: TOP_MID
+            y: 76
             width: 440
-            height: 170
+            height: 368
             scrollable: false
             widgets:
-              - label: { text: "\U000F00DF", text_font: f_icons, align: TOP_LEFT, x: 22, y: 22 }
-              - label: { text: "Brightness", align: TOP_LEFT, x: 76, y: 30 }
+              # Brightness
+              - label: { text: "Brightness", align: TOP_LEFT, x: 22, y: 26 }
               # Minimum 5% so the slider can't black out the screen with no way back except Home Assistant
               - slider:
                   id: sld_brightness
-                  align: BOTTOM_MID
-                  y: -40
-                  width: 380
-                  height: 16
+                  align: TOP_RIGHT
+                  x: -30
+                  y: 30
+                  width: 200
+                  height: 14
                   min_value: 5
                   max_value: 100
                   value: 100
-                  bg_color: 0x2A323D
+                  styles: settings_slider
                   indicator:
                     bg_color: 0xF5B942
                   knob:
@@ -925,3 +986,91 @@ lvgl:
                     - light.turn_on:
                         id: display_backlight
                         brightness: !lambda return x / 100.0;
+              # Dim brightness
+              - label: { text: "Dim to", align: TOP_LEFT, x: 22, y: 98 }
+              - slider:
+                  id: sld_dim
+                  align: TOP_RIGHT
+                  x: -30
+                  y: 102
+                  width: 200
+                  height: 14
+                  min_value: 5
+                  max_value: 100
+                  value: 20
+                  styles: settings_slider
+                  indicator:
+                    bg_color: 0xF5B942
+                  knob:
+                    bg_color: 0xF2F4F7
+                    pad_all: 8
+                  gesture_bubble: false
+                  on_release:
+                    - number.set:
+                        id: dim_level
+                        value: !lambda return x;
+              # Dim after
+              - label: { text: "Dim after", align: TOP_LEFT, x: 22, y: 170 }
+              - button:
+                  styles: small_round_btn
+                  align: TOP_RIGHT
+                  x: -150
+                  y: 156
+                  widgets:
+                    - label: { align: CENTER, text: "\U000F0374", text_font: f_icons }
+                  on_click:
+                    - number.decrement: dim_after
+              - label: { id: lbl_dim_after, text: "--", align: TOP_RIGHT, x: -76, y: 170, width: 70, text_align: CENTER }
+              - button:
+                  styles: small_round_btn
+                  align: TOP_RIGHT
+                  x: -20
+                  y: 156
+                  widgets:
+                    - label: { align: CENTER, text: "\U000F0415", text_font: f_icons }
+                  on_click:
+                    - number.increment: dim_after
+              # Screen off after dimming
+              - label: { text: "Off after", align: TOP_LEFT, x: 22, y: 242 }
+              - button:
+                  styles: small_round_btn
+                  align: TOP_RIGHT
+                  x: -150
+                  y: 228
+                  widgets:
+                    - label: { align: CENTER, text: "\U000F0374", text_font: f_icons }
+                  on_click:
+                    - number.decrement: off_after_dim
+              - label: { id: lbl_off_after, text: "--", align: TOP_RIGHT, x: -76, y: 242, width: 70, text_align: CENTER }
+              - button:
+                  styles: small_round_btn
+                  align: TOP_RIGHT
+                  x: -20
+                  y: 228
+                  widgets:
+                    - label: { align: CENTER, text: "\U000F0415", text_font: f_icons }
+                  on_click:
+                    - number.increment: off_after_dim
+              # Screen saver on/off
+              - label: { text: "Screen saver", align: TOP_LEFT, x: 22, y: 314 }
+              - switch:
+                  id: sw_saver
+                  align: TOP_RIGHT
+                  x: -24
+                  y: 306
+                  width: 72
+                  height: 38
+                  bg_color: 0x2A323D
+                  indicator:
+                    checked:
+                      bg_color: 0xF5B942
+                  knob:
+                    bg_color: 0xF2F4F7
+                  on_change:
+                    - if:
+                        condition:
+                          lambda: return x;
+                        then:
+                          - switch.turn_on: screensaver_enabled
+                        else:
+                          - switch.turn_off: screensaver_enabled
