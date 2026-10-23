@@ -29,6 +29,8 @@ logger:
 api:
   encryption:
     key: !secret encryption_key
+  # The default 15 min reboots the panel every 15 min while Home Assistant is down
+  reboot_timeout: 1h
 
 ota:
   - platform: esphome
