@@ -5,6 +5,9 @@ esphome:
   # ESPHome only leaves an LVGL option alone when it comes from these build flags
   build_flags:
     - -DLV_USE_SNAPSHOT=1
+  # Her pink colours and the switch between the two sets
+  includes:
+    - theme.h
   on_boot:
     priority: -100
     then:
@@ -14,6 +17,7 @@ esphome:
           transition_length: 0s
       - globals.set: { id: ui_ready, value: "true" }
       - script.execute: sync_screen_settings
+      - script.execute: apply_page_set
 
 esp32:
   variant: esp32s3
@@ -163,19 +167,27 @@ touchscreen:
             - script.execute: restore_brightness
     # LVGL follows one finger only. A second finger can make the reported point jump, which
     # LVGL took as release plus new press: a two-finger tap on a light switched it twice.
-    # So a touch with 2+ fingers reaches no widget.
+    # So a touch with 2+ fingers reaches no widget, and 3+ fingers switch the page set.
     on_update:
       - lambda: |-
-          if (touches.size() < 2 || id(multi_touch))
+          if (touches.size() < 2)
             return;
-          id(multi_touch) = true;
-          // Reset first: wait_release alone left the button in its pressed look (lv_indev.c, LVGL 9.5)
-          lv_indev_t *indev = lv_indev_get_next(nullptr);
-          lv_indev_reset(indev, nullptr);
-          lv_indev_wait_release(indev);
+          if (!id(multi_touch)) {
+            id(multi_touch) = true;
+            // Reset first: wait_release alone left the button in its pressed look (lv_indev.c, LVGL 9.5)
+            lv_indev_t *indev = lv_indev_get_next(nullptr);
+            lv_indev_reset(indev, nullptr);
+            lv_indev_wait_release(indev);
+          }
+          if (touches.size() >= 3 && !id(set_switched)) {
+            id(set_switched) = true;
+            id(her_set) = !id(her_set);
+            id(apply_page_set).execute();
+          }
     # Wake from the screen saver; while LVGL is paused the tap reaches no widget
     on_release:
       - globals.set: { id: multi_touch, value: "false" }
+      - globals.set: { id: set_switched, value: "false" }
       - if:
           condition: lvgl.is_paused
           then:
@@ -267,10 +279,10 @@ interval:
           int size = ha_ok ? 8 : 16;
           lv_obj_set_size(id(dot_conn), size, size);
           lv_obj_set_style_radius(id(dot_conn), size / 2, LV_PART_MAIN);
-          lv_obj_set_style_bg_color(id(dot_conn), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(dot_conn), theme::color(c), LV_PART_MAIN);
           lv_obj_set_style_bg_opa(id(dot_conn), ha_ok ? LV_OPA_40 : LV_OPA_COVER, LV_PART_MAIN);
           lv_label_set_text(id(lbl_conn), ha_ok ? "" : wifi_ok ? "No Home Assistant" : "No WiFi");
-          lv_obj_set_style_text_color(id(lbl_conn), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_conn), theme::color(c), LV_PART_MAIN);
 
           // Without Home Assistant for 2 min, replace the readings with "--" so nobody
           // trusts an old value; Home Assistant resends every state when it reconnects
@@ -293,11 +305,20 @@ interval:
           lv_label_set_text(id(lbl_offset), "");
           lv_label_set_text(id(lbl_bed_hum), "");
           for (lv_obj_t *l : {id(st_co2), id(st_pm25), id(st_hum), id(ic_co2), id(ic_pm25), id(ic_hum)})
-            lv_obj_set_style_text_color(l, lv_color_hex(0x8A94A6), LV_PART_MAIN);
-          lv_obj_set_style_bg_color(id(chip_status), lv_color_hex(0x1B2129), LV_PART_MAIN);
-          lv_obj_set_style_bg_color(id(chip_bed), lv_color_hex(0x1B2129), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(chip_bed), lv_color_hex(0x8A94A6), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(chip_status), lv_color_hex(0x8A94A6), LV_PART_MAIN);
+            lv_obj_set_style_text_color(l, theme::color(0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(chip_status), theme::color(0x1B2129), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(chip_bed), theme::color(0x1B2129), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(chip_bed), theme::color(0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(chip_status), theme::color(0x8A94A6), LV_PART_MAIN);
+  # Back to her page set after 2 min without a touch, so it never stays on mine
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: return !id(her_set) && lv_display_get_inactive_time(nullptr) > 120000;
+          then:
+            - globals.set: { id: her_set, value: "true" }
+            - script.execute: apply_page_set
 
 globals:
   # Numbers restore their values during setup, before LVGL has created the widgets
@@ -315,12 +336,43 @@ globals:
     type: float
     restore_value: true
     initial_value: "1.0"
-  # The current touch has 2+ fingers
+  # Her page set (pink, without the Screen page) or mine; the panel starts with hers
+  - id: her_set
+    type: bool
+    initial_value: "true"
+  # The current touch has 2+ fingers / has already switched the page set
   - id: multi_touch
+    type: bool
+    initial_value: "false"
+  - id: set_switched
     type: bool
     initial_value: "false"
 
 script:
+  # Colours and pages for the current set: hers is pink without the Screen page
+  - id: apply_page_set
+    then:
+      - lambda: |-
+          bool pink = id(her_set);
+          if (theme::pink != pink) {
+            theme::pink = pink;
+            for (lv_style_t *s : {id(page_style), id(card), id(round_btn), id(small_round_btn), id(settings_slider),
+                                  id(muted), id(page_title)})
+              theme::swap_style(s, pink);
+            for (auto *page : {id(heating), id(bedroom), id(living_room), id(lights), id(screen)})
+              theme::swap_tree(page->obj, pink);
+            theme::swap_tree(lv_layer_top(), pink);
+          }
+          id(screen)->skip = pink;
+          if (pink)
+            lv_obj_add_flag(id(dot_screen), LV_OBJ_FLAG_HIDDEN);
+          else
+            lv_obj_remove_flag(id(dot_screen), LV_OBJ_FLAG_HIDDEN);
+      - if:
+          condition:
+            lambda: return id(her_set) && id(screen)->is_showing();
+          then:
+            - lvgl.page.show: heating
   # Report the visible page to Home Assistant and light its dot at the bottom
   - id: page_loaded
     parameters:
@@ -331,7 +383,7 @@ script:
           id(page_select).publish_state(name);
           lv_obj_t *dots[] = {id(dot_heating), id(dot_bedroom), id(dot_air), id(dot_lights), id(dot_screen)};
           for (int i = 0; i < 5; i++)
-            lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == index ? 0xF2F4F7 : 0x3A4350), LV_PART_MAIN);
+            lv_obj_set_style_bg_color(dots[i], theme::color(i == index ? 0xF2F4F7 : 0x3A4350), LV_PART_MAIN);
   # Show the screen settings on the Screen page
   - id: sync_screen_settings
     then:
@@ -471,8 +523,8 @@ sensor:
             else { c = 0xFF453A; s = "Open a window"; }
           }
           lv_label_set_text(id(st_co2), s);
-          lv_obj_set_style_text_color(id(st_co2), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_co2), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(st_co2), theme::color(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(ic_co2), theme::color(c), LV_PART_MAIN);
   - platform: homeassistant
     id: lr_pm25
     entity_id: sensor.air_quality_monitor_pm_2_5
@@ -492,8 +544,8 @@ sensor:
             else { c = 0xFF453A; s = "Poor"; }
           }
           lv_label_set_text(id(st_pm25), s);
-          lv_obj_set_style_text_color(id(st_pm25), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_pm25), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(st_pm25), theme::color(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(ic_pm25), theme::color(c), LV_PART_MAIN);
   - platform: homeassistant
     id: lr_humidity
     entity_id: sensor.atc_5977_humidity
@@ -514,8 +566,8 @@ sensor:
             else { c = 0xFF453A; s = "Too humid"; }
           }
           lv_label_set_text(id(st_hum), s);
-          lv_obj_set_style_text_color(id(st_hum), lv_color_hex(c), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(ic_hum), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(st_hum), theme::color(c), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(ic_hum), theme::color(c), LV_PART_MAIN);
   # Bedroom: ATC 42B9 is the bedroom thermostat's target_sensor
   - platform: homeassistant
     id: bed_temp
@@ -566,8 +618,8 @@ text_sensor:
           bool h = x == "heating";
           lv_label_set_text(id(lbl_status), h ? "Heating" : "Not heating");
           lv_label_set_text(id(ico_status), h ? "\U000F0238" : "\U000F0AD8");
-          lv_obj_set_style_bg_color(id(chip_status), lv_color_hex(h ? 0xFF7A1A : 0x1B2129), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(chip_status), lv_color_hex(h ? 0xFFFFFF : 0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(chip_status), theme::color(h ? 0xFF7A1A : 0x1B2129), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(chip_status), theme::color(h ? 0xFFFFFF : 0x8A94A6), LV_PART_MAIN);
   - platform: homeassistant
     id: bed_action
     entity_id: climate.bedroom
@@ -577,8 +629,8 @@ text_sensor:
           bool h = x == "heating";
           lv_label_set_text(id(lbl_bed_status), h ? "Heating" : "Not heating");
           lv_label_set_text(id(ico_bed_status), h ? "\U000F0238" : "\U000F0AD8");
-          lv_obj_set_style_bg_color(id(chip_bed), lv_color_hex(h ? 0xFF7A1A : 0x1B2129), LV_PART_MAIN);
-          lv_obj_set_style_text_color(id(chip_bed), lv_color_hex(h ? 0xFFFFFF : 0x8A94A6), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(chip_bed), theme::color(h ? 0xFF7A1A : 0x1B2129), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(chip_bed), theme::color(h ? 0xFFFFFF : 0x8A94A6), LV_PART_MAIN);
 
 button:
   - platform: restart
@@ -697,6 +749,8 @@ lvgl:
       pad_all: 0
     - id: card
       bg_color: 0x1B2129
+      # Otherwise cards take the dark theme's white text, also on her light pink cards
+      text_color: 0xF2F4F7
       bg_opa: cover
       radius: 24
       border_width: 0

@@ -4,7 +4,8 @@ Builds panel.yaml (or another config given as argument) for ESPHome's host platf
 hardware parts swapped for an in-memory display, fills in fixed demo values, and writes one PNG
 per page to .esphome/preview/<config name>/. Only the look: no touch, no Home Assistant.
 
-    python3 preview.py                      # panel.yaml, all pages
+    python3 preview.py                      # panel.yaml, all pages, her page set
+    python3 preview.py --set mine
     python3 preview.py other.yaml --brightness 100 --dim 5
 """
 import argparse
@@ -47,6 +48,8 @@ auto call = id(display_backlight).turn_on();
 call.set_brightness({brightness} / 100.0f);
 call.set_transition_length(0);
 call.perform();
+id(her_set) = {her};
+id(apply_page_set).execute();
 """
 
 
@@ -55,7 +58,7 @@ def replace_once(text, old, new):
     return text.replace(old, new)
 
 
-def host_config(text, brightness, dim):
+def host_config(text, brightness, dim, her):
     # Top-level sections, keyed by name
     parts = re.split(r"(?m)^(?=[a-z0-9_]+:)", text)
     sections = {re.match(r"[a-z0-9_]+", p).group(0): p for p in parts if re.match(r"[a-z0-9_]+:", p)}
@@ -83,11 +86,13 @@ def host_config(text, brightness, dim):
                                         "bool ha_ok = true;")
 
     esphome = re.sub(r'(?m)^  name: .*$', f'  name: "{NAME}"', sections["esphome"], count=1)
-    sections["esphome"] = replace_once(esphome, "      - script.execute: sync_screen_settings\n",
+    # The generated config lives elsewhere, so includes need the full path
+    esphome = re.sub(r"(?m)^    - (\S+\.h)$", lambda m: f"    - {REPO / m.group(1)}", esphome)
+    sections["esphome"] = replace_once(esphome,"      - script.execute: sync_screen_settings\n",
                                        "      - script.execute: sync_screen_settings\n"
                                        "      - script.execute: preview_run\n")
 
-    fixture = "".join(f"          {line}\n" for line in FIXTURE.format(brightness=brightness, dim=dim).strip().splitlines())
+    fixture = "".join(f"          {line}\n" for line in FIXTURE.format(brightness=brightness, dim=dim, her=str(her).lower()).strip().splitlines())
     shots = "".join(f"      - lvgl.page.show: {p}\n      - delay: 300ms\n"
                     f'      - snapshot.take: {{ id: tft_display, filename: "{p}" }}\n' for p in PAGES)
     sections["script"] = replace_once(sections["script"], "script:\n", (
@@ -117,13 +122,14 @@ def main():
     parser.add_argument("config", nargs="?", default=REPO / "panel.yaml", type=pathlib.Path)
     parser.add_argument("--brightness", type=int, default=100, help="screen brightness slider, 5-100")
     parser.add_argument("--dim", type=int, default=20, help="dim brightness slider, 5-100")
+    parser.add_argument("--set", choices=["hers", "mine"], default="hers", help="page set and colours")
     parser.add_argument("--out", type=pathlib.Path, help="output folder (default .esphome/preview/<config name>)")
     args = parser.parse_args()
 
     work = REPO / ".esphome" / "preview"
     work.mkdir(parents=True, exist_ok=True)
     yaml = work / "preview.yaml"
-    yaml.write_text(host_config(args.config.read_text(), args.brightness, args.dim))
+    yaml.write_text(host_config(args.config.read_text(), args.brightness, args.dim, args.set == "hers"))
     out = args.out or work / args.config.stem
     out.mkdir(parents=True, exist_ok=True)
 

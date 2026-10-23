@@ -7,7 +7,17 @@ Home Assistant wall panel: heating, air quality, lights and screen settings.
 <img src="screenshots/air.png" width="240" alt="Air"> <img src="screenshots/lights.png" width="240" alt="Lights">
 <img src="screenshots/screen.png" width="240" alt="Screen">
 
-Swipe left and right to change pages. The pictures come from `python3 preview.py`, which builds the
+There are two page sets. The panel starts with a light pink one without the Screen page:
+
+<img src="screenshots/hers/heating.png" width="240" alt="Heating, pink"> <img src="screenshots/hers/bedroom.png" width="240" alt="Bedroom, pink">
+<img src="screenshots/hers/air.png" width="240" alt="Air, pink"> <img src="screenshots/hers/lights.png" width="240" alt="Lights, pink">
+
+A tap with three fingers switches between the sets; after 2 minutes without a touch the panel goes back to
+the pink one. Touches with two or more fingers never press a button. The colours of both sets are in
+`theme.h`.
+
+Swipe left and right to change pages. The pictures come from `python3 preview.py` (`--set hers` or
+`--set mine`), which builds the
 config for this computer instead of the panel and renders every page with demo values into
 `.esphome/preview/` (about 4 s after a change, 30 s the first time). It shows the look only, no touch and
 no Home Assistant. The panel itself also serves its current screen at `GET /screenshot` (see
