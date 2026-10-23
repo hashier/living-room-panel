@@ -653,8 +653,10 @@ lvgl:
   # Page dots at the bottom, always on top of the pages
   top_layer:
     widgets:
-      # Connection dot, top right: red no WiFi, yellow WiFi only, green Home Assistant connected
-      - obj: { id: dot_conn, align: TOP_RIGHT, x: -10, y: 10, width: 16, height: 16, radius: 8, border_width: 0, bg_color: 0xFF453A, pad_all: 0, outline_width: 0, shadow_width: 0, scrollable: false, scrollbar_mode: "OFF" }
+      # Connection dot, top right: red no WiFi, yellow WiFi only, green Home Assistant connected.
+      # pad_all: 0 because the theme's default padding is larger than the dot, which made it
+      # scrollable and LVGL drew grey scrollbars on its top and left edge
+      - obj: { id: dot_conn, align: TOP_RIGHT, x: -10, y: 10, width: 16, height: 16, radius: 8, border_width: 0, bg_color: 0xFF453A, pad_all: 0 }
       - label: { id: lbl_conn, text: "", text_font: montserrat_16, align: TOP_RIGHT, x: -34, y: 9, text_color: 0xFF453A }
       - obj:
           align: BOTTOM_MID
