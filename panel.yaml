@@ -682,8 +682,20 @@ lvgl:
       border_width: 0
       shadow_width: 0
       text_color: 0xF2F4F7
+    # Thin track, knob stops at its ends. LVGL centres the knob on the end of the yellow part, which
+    # the left/right padding shortens by half a knob (30 px), so the knob never sticks out (lv_slider.c,
+    # LVGL 9.5). That leaves the first 15 px of the track uncovered, so the track itself is yellow
+    # there. Stops are in 1/255 of the width: 30/31 puts the step at about 24 px, under the yellow
+    # part or the knob, so it doesn't have to hit 15 px exactly.
     - id: settings_slider
-      bg_color: 0x2A323D
+      bg_color: 0xF5B942
+      bg_grad_color: 0x2A323D
+      bg_grad_dir: HOR
+      bg_main_stop: 30
+      bg_grad_stop: 31
+      bg_opa: cover
+      pad_left: 15
+      pad_right: 15
     - id: small_round_btn
       width: 56
       height: 56
@@ -1225,6 +1237,7 @@ lvgl:
                   styles: settings_slider
                   indicator:
                     bg_color: 0xF5B942
+                    radius: 0
                   knob:
                     bg_color: 0xF2F4F7
                     pad_all: 8
@@ -1251,6 +1264,7 @@ lvgl:
                   styles: settings_slider
                   indicator:
                     bg_color: 0xF5B942
+                    radius: 0
                   knob:
                     bg_color: 0xF2F4F7
                     pad_all: 8
