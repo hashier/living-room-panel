@@ -242,10 +242,18 @@ interval:
   - interval: 1s
     then:
       - lambda: |-
-          uint32_t c = 0xFF453A;
-          if (wifi::global_wifi_component->is_connected())
-            c = api::global_api_server->is_connected() ? 0x34C759 : 0xFFC107;
+          bool wifi_ok = wifi::global_wifi_component->is_connected();
+          bool ha_ok = wifi_ok && api::global_api_server->is_connected();
+          // Connected: small dim green dot. Problem: big full-colour dot plus a word
+          uint32_t c = ha_ok ? 0x34C759 : wifi_ok ? 0xFFC107 : 0xFF453A;
+          int size = ha_ok ? 8 : 16;
+          lv_obj_set_size(id(dot_conn), size, size);
+          lv_obj_set_style_radius(id(dot_conn), size / 2, LV_PART_MAIN);
           lv_obj_set_style_bg_color(id(dot_conn), lv_color_hex(c), LV_PART_MAIN);
+          lv_obj_set_style_bg_opa(id(dot_conn), ha_ok ? LV_OPA_40 : LV_OPA_COVER, LV_PART_MAIN);
+          lv_label_set_text(id(lbl_conn), ha_ok ? "" : wifi_ok ? "No Home Assistant" : "No WiFi");
+          lv_obj_set_style_text_color(id(lbl_conn), lv_color_hex(c), LV_PART_MAIN);
+
 
 globals:
   # Numbers restore their values during setup, before LVGL has created the widgets
@@ -627,7 +635,8 @@ lvgl:
   top_layer:
     widgets:
       # Connection dot, top right: red no WiFi, yellow WiFi only, green Home Assistant connected
-      - obj: { id: dot_conn, align: TOP_RIGHT, x: -10, y: 10, width: 8, height: 8, radius: 4, border_width: 0, bg_color: 0xFF453A, bg_opa: 40% }
+      - obj: { id: dot_conn, align: TOP_RIGHT, x: -10, y: 10, width: 16, height: 16, radius: 8, border_width: 0, bg_color: 0xFF453A }
+      - label: { id: lbl_conn, text: "", text_font: montserrat_16, align: TOP_RIGHT, x: -34, y: 9, text_color: 0xFF453A }
       - obj:
           align: BOTTOM_MID
           y: -10
