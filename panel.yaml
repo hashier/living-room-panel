@@ -381,8 +381,6 @@ font:
       - "\U000F0335" # lightbulb
       - "\U000F1253" # lightbulb-group
       - "\U000F04B9" # sofa
-      - "\U000F11DB" # window-closed-variant
-      - "\U000F00DF" # brightness-6
       - "\U000F0374" # minus
       - "\U000F0415" # plus
   # Small room icons for the page titles
