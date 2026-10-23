@@ -343,7 +343,7 @@ script:
             lv_obj_add_state(id(sw_saver), LV_STATE_CHECKED);
           else
             lv_obj_remove_state(id(sw_saver), LV_STATE_CHECKED);
-  # "All lights" shows as on while any of the four is on
+  # "All lights" shows as on when all four are on
   - id: update_all_button
     then:
       - lvgl.widget.update:
