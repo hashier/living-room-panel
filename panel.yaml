@@ -161,8 +161,21 @@ touchscreen:
             lambda: return id(dimmed) && !id(lvgl_comp).is_paused();
           then:
             - script.execute: restore_brightness
+    # LVGL follows one finger only. A second finger can make the reported point jump, which
+    # LVGL took as release plus new press: a two-finger tap on a light switched it twice.
+    # So a touch with 2+ fingers reaches no widget.
+    on_update:
+      - lambda: |-
+          if (touches.size() < 2 || id(multi_touch))
+            return;
+          id(multi_touch) = true;
+          // Reset first: wait_release alone left the button in its pressed look (lv_indev.c, LVGL 9.5)
+          lv_indev_t *indev = lv_indev_get_next(nullptr);
+          lv_indev_reset(indev, nullptr);
+          lv_indev_wait_release(indev);
     # Wake from the screen saver; while LVGL is paused the tap reaches no widget
     on_release:
+      - globals.set: { id: multi_touch, value: "false" }
       - if:
           condition: lvgl.is_paused
           then:
@@ -302,6 +315,10 @@ globals:
     type: float
     restore_value: true
     initial_value: "1.0"
+  # The current touch has 2+ fingers
+  - id: multi_touch
+    type: bool
+    initial_value: "false"
 
 script:
   # Report the visible page to Home Assistant and light its dot at the bottom
