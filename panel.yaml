@@ -1021,7 +1021,7 @@ lvgl:
               - label: { text: "CO₂", styles: muted, align: LEFT_MID, x: 82, y: -16 }
               - label: { id: st_co2, text: "--", align: LEFT_MID, x: 82, y: 16 }
               - label: { id: val_co2, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "ppm", styles: muted, align: RIGHT_MID, x: -22, y: 10 }
+              - label: { text: "ppm", styles: muted, align: RIGHT_MID, x: -8, y: 10, width: 72 }
         - obj:
             styles: card
             align: TOP_MID
@@ -1034,7 +1034,7 @@ lvgl:
               - label: { text: "Fine dust", styles: muted, align: LEFT_MID, x: 82, y: -16 }
               - label: { id: st_pm25, text: "--", align: LEFT_MID, x: 82, y: 16 }
               - label: { id: val_pm25, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "µg/m³", styles: muted, align: RIGHT_MID, x: -14, y: 10 }
+              - label: { text: "µg/m³", styles: muted, align: RIGHT_MID, x: -8, y: 10, width: 72 }
         - obj:
             styles: card
             align: TOP_MID
@@ -1047,7 +1047,7 @@ lvgl:
               - label: { text: "Humidity", styles: muted, align: LEFT_MID, x: 82, y: -16 }
               - label: { id: st_hum, text: "--", align: LEFT_MID, x: 82, y: 16 }
               - label: { id: val_hum, text: "--", text_font: f_value, align: RIGHT_MID, x: -84 }
-              - label: { text: "%", styles: muted, align: RIGHT_MID, x: -40, y: 10 }
+              - label: { text: "%", styles: muted, align: RIGHT_MID, x: -8, y: 10, width: 72 }
 
     # ---------------------------------------------------------------- Lights
     - id: lights
@@ -1263,13 +1263,13 @@ lvgl:
               - button:
                   styles: small_round_btn
                   align: TOP_RIGHT
-                  x: -150
+                  x: -170
                   y: 156
                   widgets:
                     - label: { align: CENTER, text: "\U000F0374", text_font: f_icons }
                   on_click:
                     - number.decrement: dim_after
-              - label: { id: lbl_dim_after, text: "--", align: TOP_RIGHT, x: -76, y: 170, width: 70, text_align: CENTER }
+              - label: { id: lbl_dim_after, text: "--", align: TOP_RIGHT, x: -78, y: 170, width: 90, text_align: CENTER }
               - button:
                   styles: small_round_btn
                   align: TOP_RIGHT
@@ -1284,13 +1284,13 @@ lvgl:
               - button:
                   styles: small_round_btn
                   align: TOP_RIGHT
-                  x: -150
+                  x: -170
                   y: 228
                   widgets:
                     - label: { align: CENTER, text: "\U000F0374", text_font: f_icons }
                   on_click:
                     - number.decrement: off_after_dim
-              - label: { id: lbl_off_after, text: "--", align: TOP_RIGHT, x: -76, y: 242, width: 70, text_align: CENTER }
+              - label: { id: lbl_off_after, text: "--", align: TOP_RIGHT, x: -78, y: 242, width: 90, text_align: CENTER }
               - button:
                   styles: small_round_btn
                   align: TOP_RIGHT
