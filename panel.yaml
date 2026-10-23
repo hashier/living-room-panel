@@ -667,6 +667,11 @@ binary_sensor:
 lvgl:
   id: lvgl_comp
   default_font: f_text
+  # Small enough for internal RAM, which draws faster than PSRAM. A full page took about
+  # 140 ms with the default full-screen buffer, 125 ms at 12% and 105 ms at 25% (measured
+  # 2026-10-23). Still over ESPHome's 50 ms warning, so a page change logs one "lvgl took a
+  # long time" until the threshold has risen past it; a 480x480 redraw on this chip needs that.
+  buffer_size: 25%
   style_definitions:
     - id: page_style
       bg_color: 0x0F1419
