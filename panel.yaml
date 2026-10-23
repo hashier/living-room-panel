@@ -34,7 +34,8 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    # Uploads are encrypted with the api encryption key
+    encryption:
     on_begin: # prevent screen flickering during OTA
       - light.turn_off:
           id: display_backlight
